@@ -76,6 +76,10 @@ public class PgpInputStream extends InputStream {
 				KeyPair jcaKeyPair = new KeyPair(pubKey, privKey);
 				JcaPGPKeyPair keyPair = new JcaPGPKeyPair(encryptionConfig.getPublicKeyAlgorithm(), jcaKeyPair, encryptionConfig.getPublicKeyTime());
 				sKey = keyPair.getPrivateKey();
+				if (keyPair.getPublicKey().getKeyID() != pbe.getKeyID()) {
+					throw new PGPException("Expected encryption public key ID [" + keyPair.getPublicKey().getKeyID() + "] not found in stream ["
+							+ pbe.getKeyID() + "]");
+				}
 			}
 			in = pbe.getDataStream(new JcePublicKeyDataDecryptorFactoryBuilder().setProvider("BC").build(sKey));
 		}
@@ -93,6 +97,10 @@ public class PgpInputStream extends InputStream {
 			for (int index = 0; index < sigList.size(); ++index) {
 				onePassSignature = sigList.get(index);
 				PGPPublicKey sigKey = getSigKey(signatureConfig);
+				if (sigKey.getKeyID() != onePassSignature.getKeyID()) {
+					throw new PGPException("Expected signature public key ID [" + sigKey.getKeyID() + "] not found in stream [" + onePassSignature.getKeyID()
+							+ "]");
+				}
 				onePassSignature.init(new JcaPGPContentVerifierBuilderProvider().setProvider("BC"), sigKey);
 			}
 			message = pgpFact.nextObject();
