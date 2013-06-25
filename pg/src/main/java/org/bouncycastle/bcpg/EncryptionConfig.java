@@ -1,8 +1,12 @@
 package org.bouncycastle.bcpg;
 
+import java.security.KeyPair;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.util.Date;
+
+import org.bouncycastle.openpgp.PGPException;
+import org.bouncycastle.openpgp.operator.jcajce.JcaPGPKeyPair;
 
 /**
  * Holds configuration for PGP stream encryption/decryption.
@@ -55,5 +59,12 @@ public class EncryptionConfig {
 
 	public void setPrivateKey(PrivateKey privateKey) {
 		this.privateKey = privateKey;
+	}
+
+	public JcaPGPKeyPair getPGPKeyPair() throws PGPException {
+		PublicKey pubKey = getPublicKey();
+		PrivateKey privKey = getPrivateKey();
+		KeyPair jcaKeyPair = new KeyPair(pubKey, privKey);
+		return new JcaPGPKeyPair(getPublicKeyAlgorithm(), jcaKeyPair, getPublicKeyTime());
 	}
 }

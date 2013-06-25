@@ -8,18 +8,15 @@ import java.security.SignatureException;
 import java.util.Date;
 import java.util.Iterator;
 
-import org.bouncycastle.bcpg.ArmoredOutputStream;
 import org.bouncycastle.openpgp.PGPCompressedDataGenerator;
 import org.bouncycastle.openpgp.PGPEncryptedDataGenerator;
 import org.bouncycastle.openpgp.PGPException;
 import org.bouncycastle.openpgp.PGPLiteralDataGenerator;
-import org.bouncycastle.openpgp.PGPPrivateKey;
-import org.bouncycastle.openpgp.PGPPublicKey;
 import org.bouncycastle.openpgp.PGPSignature;
 import org.bouncycastle.openpgp.PGPSignatureGenerator;
 import org.bouncycastle.openpgp.PGPSignatureSubpacketGenerator;
 import org.bouncycastle.openpgp.operator.jcajce.JcaPGPContentSignerBuilder;
-import org.bouncycastle.openpgp.operator.jcajce.JcaPGPKeyConverter;
+import org.bouncycastle.openpgp.operator.jcajce.JcaPGPKeyPair;
 import org.bouncycastle.openpgp.operator.jcajce.JcePGPDataEncryptorBuilder;
 import org.bouncycastle.openpgp.operator.jcajce.JcePublicKeyKeyEncryptionMethodGenerator;
 
@@ -39,7 +36,7 @@ public class PgpOutputStream extends FilterOutputStream {
 	private PGPSignatureGenerator sGen;
 	private OutputStream literalDataOutputStream;
 	private final boolean armored;
-	private SignatureConfig signatureConfig;
+	private final SignatureConfig signatureConfig;
 
 	/**
 	 * Constructor.
@@ -50,22 +47,25 @@ public class PgpOutputStream extends FilterOutputStream {
 	 * @throws IOException
 	 */
 	public PgpOutputStream(OutputStream out, boolean armored, boolean checkIntegrity, int compressionAlgorithm, char dataFormat,
-			EncryptionConfig encryptionConfig, SignatureConfig signatureConfig) throws PGPException, IOException {
+			EncryptionConfigs encryptionConfigs, EncryptionConfigs signatureConfigs) throws PGPException, IOException {
 		super(out);
 		originalOut = out;
 		this.armored = armored;
-		this.signatureConfig = signatureConfig;
+		if (signatureConfigs != null && !signatureConfigs.isEmpty()) {
+			this.signatureConfig = (SignatureConfig) signatureConfigs.get(0);
+		} else {
+			this.signatureConfig = null;
+		}
 		if (armored) {
 			armoredOut = new ArmoredOutputStream(out);
 			out = armoredOut;
 		}
-		if (encryptionConfig != null) {
+		if (encryptionConfigs != null && !encryptionConfigs.isEmpty()) {
+			EncryptionConfig encryptionConfig = encryptionConfigs.get(0);
+			JcaPGPKeyPair keyPair = encryptionConfig.getPGPKeyPair();
 			PGPEncryptedDataGenerator encryptedDataGenerator = new PGPEncryptedDataGenerator(new JcePGPDataEncryptorBuilder(
 					encryptionConfig.getSymmetricKeyAlgorithm()).setWithIntegrityPacket(checkIntegrity).setSecureRandom(new SecureRandom()).setProvider("BC"));
-			JcaPGPKeyConverter keyConverter = new JcaPGPKeyConverter();
-			PGPPublicKey pgpKey = keyConverter.getPGPPublicKey(encryptionConfig.getPublicKeyAlgorithm(), encryptionConfig.getPublicKey(),
-					encryptionConfig.getPublicKeyTime());
-			encryptedDataGenerator.addMethod(new JcePublicKeyKeyEncryptionMethodGenerator(pgpKey).setProvider("BC"));
+			encryptedDataGenerator.addMethod(new JcePublicKeyKeyEncryptionMethodGenerator(keyPair.getPublicKey()).setProvider("BC"));
 			encryptOut = encryptedDataGenerator.open(out, new byte[BUFFER_SIZE]);
 			out = encryptOut;
 		}
@@ -76,13 +76,9 @@ public class PgpOutputStream extends FilterOutputStream {
 		if (signatureConfig != null) {
 			sGen = new PGPSignatureGenerator(
 					new JcaPGPContentSignerBuilder(signatureConfig.getPublicKeyAlgorithm(), signatureConfig.getHashAlgorithm()).setProvider("BC"));
-			JcaPGPKeyConverter conv = new JcaPGPKeyConverter();
-			PGPPublicKey pgpSigPubKey = conv.getPGPPublicKey(signatureConfig.getPublicKeyAlgorithm(), signatureConfig.getPublicKey(),
-					signatureConfig.getPublicKeyTime());
-			PGPPrivateKey pgpSigPrivKey = conv.getPGPPrivateKey(pgpSigPubKey, signatureConfig.getPrivateKey());
-
-			sGen.init(PGPSignature.BINARY_DOCUMENT, pgpSigPrivKey);
-			Iterator<?> it = pgpSigPubKey.getUserIDs();
+			JcaPGPKeyPair sigKeyPair = signatureConfig.getPGPKeyPair();
+			sGen.init(PGPSignature.BINARY_DOCUMENT, sigKeyPair.getPrivateKey());
+			Iterator<?> it = sigKeyPair.getPublicKey().getUserIDs();
 			if (it.hasNext()) {
 				PGPSignatureSubpacketGenerator spGen = new PGPSignatureSubpacketGenerator();
 				spGen.setSignerUserID(false, (String) it.next());

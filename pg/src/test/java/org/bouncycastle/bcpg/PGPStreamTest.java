@@ -26,23 +26,23 @@ public class PGPStreamTest extends TestCase {
 	private static final int MESSAGE_SIZE = 500000;
 
 	public void testEncryptionWithoutArmor() throws Exception {
-		EncryptionConfig encryptionConfig = createEncryptionConfig();
+		EncryptionConfigs encryptionConfigs = createEncryptionConfig();
 		byte[] message = createRandomMessage();
-		byte[] encryptedMessage = encryptMessage(encryptionConfig, null, message, false, true);
-		byte[] decryptedMessage = decryptMessage(encryptionConfig, null, encryptedMessage, true);
+		byte[] encryptedMessage = encryptMessage(encryptionConfigs, null, message, false, true);
+		byte[] decryptedMessage = decryptMessage(encryptionConfigs, null, encryptedMessage, true);
 		assertContentEquals(message, decryptedMessage);
 	}
 
 	public void testEncryptionArmored() throws Exception {
-		EncryptionConfig encryptionConfig = createEncryptionConfig();
+		EncryptionConfigs encryptionConfigs = createEncryptionConfig();
 		byte[] message = createRandomMessage();
-		byte[] encryptedMessage = encryptMessage(encryptionConfig, null, message, true, true);
-		byte[] decryptedMessage = decryptMessage(encryptionConfig, null, encryptedMessage, true);
+		byte[] encryptedMessage = encryptMessage(encryptionConfigs, null, message, true, true);
+		byte[] decryptedMessage = decryptMessage(encryptionConfigs, null, encryptedMessage, true);
 		assertContentEquals(message, decryptedMessage);
 	}
 
 	public void testSignature() throws Exception {
-		SignatureConfig signatureConfig = createSignatureConfig();
+		EncryptionConfigs signatureConfig = createSignatureConfig();
 		byte[] message = createRandomMessage();
 		byte[] encryptedMessage = encryptMessage(null, signatureConfig, message, true, false);
 		byte[] decryptedMessage = decryptMessage(null, signatureConfig, encryptedMessage, false);
@@ -50,11 +50,11 @@ public class PGPStreamTest extends TestCase {
 	}
 
 	public void testEncryptionAndSignature() throws Exception {
-		EncryptionConfig encryptionConfig = createEncryptionConfig();
-		SignatureConfig signatureConfig = createSignatureConfig();
+		EncryptionConfigs encryptionConfigs = createEncryptionConfig();
+		EncryptionConfigs signatureConfig = createSignatureConfig();
 		byte[] message = createRandomMessage();
-		byte[] encryptedMessage = encryptMessage(encryptionConfig, signatureConfig, message, true, true);
-		byte[] decryptedMessage = decryptMessage(encryptionConfig, signatureConfig, encryptedMessage, true);
+		byte[] encryptedMessage = encryptMessage(encryptionConfigs, signatureConfig, message, true, true);
+		byte[] decryptedMessage = decryptMessage(encryptionConfigs, signatureConfig, encryptedMessage, true);
 		assertContentEquals(message, decryptedMessage);
 	}
 
@@ -72,12 +72,12 @@ public class PGPStreamTest extends TestCase {
 		return message;
 	}
 
-	private static byte[] decryptMessage(EncryptionConfig encryptionConfig, SignatureConfig signatureConfig, byte[] encryptedMessage, boolean checkIntegrity) throws IOException,
+	private static byte[] decryptMessage(EncryptionConfigs encryptionConfigs, EncryptionConfigs signatureConfigs, byte[] encryptedMessage, boolean checkIntegrity) throws IOException,
 			PGPException {
 		byte[] decryptedMessage;
 		ByteArrayInputStream bais = new ByteArrayInputStream(encryptedMessage);
 		try {
-			PgpInputStream in = new PgpInputStream(bais, checkIntegrity, encryptionConfig, signatureConfig);
+			PgpInputStream in = new PgpInputStream(bais, checkIntegrity, encryptionConfigs, signatureConfigs);
 			try {
 				ByteArrayOutputStream baos2 = new ByteArrayOutputStream();
 				try {
@@ -99,10 +99,10 @@ public class PGPStreamTest extends TestCase {
 		return decryptedMessage;
 	}
 
-	private static byte[] encryptMessage(EncryptionConfig encryptionConfig, SignatureConfig signatureConfig, byte[] message, boolean armored, boolean checkIntegrity) throws PGPException, IOException {
+	private static byte[] encryptMessage(EncryptionConfigs encryptionConfigs, EncryptionConfigs signatureConfigs, byte[] message, boolean armored, boolean checkIntegrity) throws PGPException, IOException {
 		ByteArrayOutputStream baos = new ByteArrayOutputStream();
 		try {
-			PgpOutputStream out = new PgpOutputStream(baos, armored, checkIntegrity, CompressionAlgorithmTags.ZIP, PGPLiteralData.BINARY, encryptionConfig, signatureConfig);
+			PgpOutputStream out = new PgpOutputStream(baos, armored, checkIntegrity, CompressionAlgorithmTags.ZIP, PGPLiteralData.BINARY, encryptionConfigs, signatureConfigs);
 			try {
 				out.write(message);
 			} finally {
@@ -115,7 +115,7 @@ public class PGPStreamTest extends TestCase {
 		return encryptedMessage;
 	}
 
-	private static SignatureConfig createSignatureConfig() throws NoSuchAlgorithmException, NoSuchProviderException {
+	private static EncryptionConfigs createSignatureConfig() throws NoSuchAlgorithmException, NoSuchProviderException, PGPException {
 		KeyPairGenerator gen = KeyPairGenerator.getInstance("RSA", "BC");
 		gen.initialize(1024, new SecureRandom());
 		KeyPair sigPair = gen.generateKeyPair();
@@ -126,10 +126,12 @@ public class PGPStreamTest extends TestCase {
 		signatureConfig.setPublicKeyAlgorithm(PublicKeyAlgorithmTags.RSA_GENERAL);
 		signatureConfig.setPublicKeyTime(new Date());
 		signatureConfig.setSymmetricKeyAlgorithm(SymmetricKeyAlgorithmTags.AES_256);
-		return signatureConfig;
+		EncryptionConfigs encryptionConfigMap = new EncryptionConfigs();
+		encryptionConfigMap.add(signatureConfig);
+		return encryptionConfigMap;
 	}
 
-	private static EncryptionConfig createEncryptionConfig() throws NoSuchAlgorithmException, NoSuchProviderException {
+	private static EncryptionConfigs createEncryptionConfig() throws NoSuchAlgorithmException, NoSuchProviderException, PGPException {
 		KeyPairGenerator gen = KeyPairGenerator.getInstance("RSA", "BC");
 		gen.initialize(1024, new SecureRandom());
 		KeyPair encPair = gen.generateKeyPair();
@@ -139,6 +141,8 @@ public class PGPStreamTest extends TestCase {
 		encryptionConfig.setPublicKeyAlgorithm(PublicKeyAlgorithmTags.RSA_GENERAL);
 		encryptionConfig.setPublicKeyTime(new Date());
 		encryptionConfig.setSymmetricKeyAlgorithm(SymmetricKeyAlgorithmTags.AES_256);
-		return encryptionConfig;
+		EncryptionConfigs encryptionConfigMap = new EncryptionConfigs();
+		encryptionConfigMap.add(encryptionConfig);
+		return encryptionConfigMap;
 	}
 }

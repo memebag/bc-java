@@ -3,9 +3,6 @@ package org.bouncycastle.bcpg;
 import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.security.KeyPair;
-import java.security.PrivateKey;
-import java.security.PublicKey;
 import java.security.SignatureException;
 import java.util.Iterator;
 
@@ -17,13 +14,11 @@ import org.bouncycastle.openpgp.PGPObjectFactory;
 import org.bouncycastle.openpgp.PGPOnePassSignature;
 import org.bouncycastle.openpgp.PGPOnePassSignatureList;
 import org.bouncycastle.openpgp.PGPPrivateKey;
-import org.bouncycastle.openpgp.PGPPublicKey;
 import org.bouncycastle.openpgp.PGPPublicKeyEncryptedData;
 import org.bouncycastle.openpgp.PGPSignature;
 import org.bouncycastle.openpgp.PGPSignatureList;
 import org.bouncycastle.openpgp.PGPUtil;
 import org.bouncycastle.openpgp.operator.jcajce.JcaPGPContentVerifierBuilderProvider;
-import org.bouncycastle.openpgp.operator.jcajce.JcaPGPKeyConverter;
 import org.bouncycastle.openpgp.operator.jcajce.JcaPGPKeyPair;
 import org.bouncycastle.openpgp.operator.jcajce.JcePublicKeyDataDecryptorFactoryBuilder;
 
@@ -40,17 +35,21 @@ public class PgpInputStream extends InputStream {
 	private PGPOnePassSignature onePassSignature;
 	private PGPObjectFactory pgpFact;
 	private InputStream originalInputStream;
-	private final SignatureConfig signatureConfig;
+	private final EncryptionConfig signatureConfig;
 	private final boolean checkIntegrity;
 
-	public PgpInputStream(InputStream in, boolean checkIntegrity, EncryptionConfig encryptionConfig, SignatureConfig signatureConfig) throws IOException,
+	public PgpInputStream(InputStream in, boolean checkIntegrity, EncryptionConfigs encryptionConfigs, EncryptionConfigs signatureConfigs) throws IOException,
 			PGPException {
 		this.originalInputStream = in;
 		this.checkIntegrity = checkIntegrity;
-		this.signatureConfig = signatureConfig;
+		if (signatureConfigs != null && !signatureConfigs.isEmpty()) {
+			this.signatureConfig = signatureConfigs.get(0);
+		} else {
+			this.signatureConfig = null;
+		}
 		in = PGPUtil.getDecoderStream(in);
 		PGPObjectFactory pgpF = new PGPObjectFactory(in);
-		if (encryptionConfig != null) {
+		if (encryptionConfigs != null) {
 			PGPEncryptedDataList enc;
 
 			Object o = pgpF.nextObject();
@@ -71,15 +70,11 @@ public class PgpInputStream extends InputStream {
 
 			while (sKey == null && it.hasNext()) {
 				pbe = (PGPPublicKeyEncryptedData) it.next();
-				PublicKey pubKey = encryptionConfig.getPublicKey();
-				PrivateKey privKey = encryptionConfig.getPrivateKey();
-				KeyPair jcaKeyPair = new KeyPair(pubKey, privKey);
-				JcaPGPKeyPair keyPair = new JcaPGPKeyPair(encryptionConfig.getPublicKeyAlgorithm(), jcaKeyPair, encryptionConfig.getPublicKeyTime());
-				sKey = keyPair.getPrivateKey();
-				if (keyPair.getPublicKey().getKeyID() != pbe.getKeyID()) {
-					throw new PGPException("Expected encryption public key ID [" + keyPair.getPublicKey().getKeyID() + "] not found in stream ["
-							+ pbe.getKeyID() + "]");
+				JcaPGPKeyPair keyPair = encryptionConfigs.getKeyPairByID(pbe.getKeyID());
+				if (keyPair == null) {
+					throw new PGPException("Encryption key ID [" + pbe.getKeyID() + "] not found in configuration");
 				}
+				sKey = keyPair.getPrivateKey();
 			}
 			in = pbe.getDataStream(new JcePublicKeyDataDecryptorFactoryBuilder().setProvider("BC").build(sKey));
 		}
@@ -96,12 +91,11 @@ public class PgpInputStream extends InputStream {
 			PGPOnePassSignatureList sigList = (PGPOnePassSignatureList) message;
 			for (int index = 0; index < sigList.size(); ++index) {
 				onePassSignature = sigList.get(index);
-				PGPPublicKey sigKey = getSigKey(signatureConfig);
-				if (sigKey.getKeyID() != onePassSignature.getKeyID()) {
-					throw new PGPException("Expected signature public key ID [" + sigKey.getKeyID() + "] not found in stream [" + onePassSignature.getKeyID()
-							+ "]");
+				JcaPGPKeyPair keyPair = signatureConfigs.getKeyPairByID(onePassSignature.getKeyID());
+				if (keyPair==null) {
+					throw new PGPException("Signature key ID [" + onePassSignature.getKeyID() + "] not found in configuration");
 				}
-				onePassSignature.init(new JcaPGPContentVerifierBuilderProvider().setProvider("BC"), sigKey);
+				onePassSignature.init(new JcaPGPContentVerifierBuilderProvider().setProvider("BC"), keyPair.getPublicKey());
 			}
 			message = pgpFact.nextObject();
 		}
@@ -112,13 +106,6 @@ public class PgpInputStream extends InputStream {
 		} else {
 			throw new PGPException("Unexpected message part of type [" + message.getClass() + "] received.");
 		}
-	}
-
-	private PGPPublicKey getSigKey(SignatureConfig signatureConfig) throws PGPException {
-		PublicKey jcaSigKey = signatureConfig.getPublicKey();
-		JcaPGPKeyConverter conv = new JcaPGPKeyConverter();
-		PGPPublicKey sigKey = conv.getPGPPublicKey(signatureConfig.getPublicKeyAlgorithm(), jcaSigKey, signatureConfig.getPublicKeyTime());
-		return sigKey;
 	}
 
 	@Override
