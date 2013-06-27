@@ -9,6 +9,7 @@ import java.util.Iterator;
 import org.bouncycastle.openpgp.PGPCompressedData;
 import org.bouncycastle.openpgp.PGPEncryptedDataList;
 import org.bouncycastle.openpgp.PGPException;
+import org.bouncycastle.openpgp.PGPKeyPair;
 import org.bouncycastle.openpgp.PGPLiteralData;
 import org.bouncycastle.openpgp.PGPObjectFactory;
 import org.bouncycastle.openpgp.PGPOnePassSignature;
@@ -19,7 +20,6 @@ import org.bouncycastle.openpgp.PGPSignature;
 import org.bouncycastle.openpgp.PGPSignatureList;
 import org.bouncycastle.openpgp.PGPUtil;
 import org.bouncycastle.openpgp.operator.jcajce.JcaPGPContentVerifierBuilderProvider;
-import org.bouncycastle.openpgp.operator.jcajce.JcaPGPKeyPair;
 import org.bouncycastle.openpgp.operator.jcajce.JcePublicKeyDataDecryptorFactoryBuilder;
 
 /**
@@ -70,7 +70,7 @@ public class PgpInputStream extends InputStream {
 
 			while (sKey == null && it.hasNext()) {
 				pbe = (PGPPublicKeyEncryptedData) it.next();
-				JcaPGPKeyPair keyPair = encryptionConfigs.getKeyPairByID(pbe.getKeyID());
+				PGPKeyPair keyPair = encryptionConfigs.getKeyPairByID(pbe.getKeyID());
 				if (keyPair == null) {
 					throw new PGPException("Encryption key ID [" + pbe.getKeyID() + "] not found in configuration");
 				}
@@ -91,7 +91,7 @@ public class PgpInputStream extends InputStream {
 			PGPOnePassSignatureList sigList = (PGPOnePassSignatureList) message;
 			for (int index = 0; index < sigList.size(); ++index) {
 				onePassSignature = sigList.get(index);
-				JcaPGPKeyPair keyPair = signatureConfigs.getKeyPairByID(onePassSignature.getKeyID());
+				PGPKeyPair keyPair = signatureConfigs.getKeyPairByID(onePassSignature.getKeyID());
 				if (keyPair==null) {
 					throw new PGPException("Signature key ID [" + onePassSignature.getKeyID() + "] not found in configuration");
 				}
